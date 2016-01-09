@@ -30,11 +30,14 @@ import gulp from 'gulp';
 import del from 'del';
 import runSequence from 'run-sequence';
 import browserSync from 'browser-sync';
+import watchLess from 'gulp-watch-less';
 import swPrecache from 'sw-precache';
 import gulpLoadPlugins from 'gulp-load-plugins';
+import source from 'vinyl-source-stream';
 import {output as pagespeed} from 'psi';
 import pkg from './package.json';
-
+import browserify from 'browserify';
+import babelify from 'babelify';
 const $ = gulpLoadPlugins();
 const reload = browserSync.reload;
 
@@ -82,48 +85,57 @@ gulp.task('styles', () => {
     'android >= 4.4',
     'bb >= 10'
   ];
+     return gulp.src('app/styles/**/*.less')
+        //.pipe($.plumber())
+        
+        .pipe($.less({
+          paths:['app/styles/']
+        }))
+        .on('error', function (err) {
+            console.log(err);
+            this.emit('end');
+        })
+        .pipe(watchLess('app/styles/**/*.less'))
+        .pipe($.autoprefixer(AUTOPREFIXER_BROWSERS))
+        //.pipe($.cssmin())
+        .pipe($.concat('bundle.css'))
 
-  // For best performance, don't add Sass partials to `gulp.src`
-  return gulp.src([
-    'app/styles/**/*.scss',
-    'app/styles/**/*.css'
-  ])
-    .pipe($.newer('.tmp/styles'))
-    .pipe($.sourcemaps.init())
-    .pipe($.sass({
-      precision: 10
-    }).on('error', $.sass.logError))
-    .pipe($.autoprefixer(AUTOPREFIXER_BROWSERS))
-    .pipe(gulp.dest('.tmp/styles'))
-    // Concatenate and minify styles
-    .pipe($.if('*.css', $.minifyCss()))
-    .pipe($.size({title: 'styles'}))
-    .pipe($.sourcemaps.write('./'))
-    .pipe(gulp.dest('dist/styles'));
+        .pipe(gulp.dest('app/styles'))
+        .pipe(gulp.dest('build'));
 });
 
 // Concatenate and minify JavaScript. Optionally transpiles ES2015 code to ES5.
 // to enables ES2015 support remove the line `"only": "gulpfile.babel.js",` in the
 // `.babelrc` file.
 gulp.task('scripts', () =>
-    gulp.src([
-      // Note: Since we are not using useref in the scripts build pipeline,
-      //       you need to explicitly list your scripts here in the right order
-      //       to be correctly concatenated
-      './app/scripts/main.js'
-      // Other scripts
-    ])
-      .pipe($.newer('.tmp/scripts'))
-      .pipe($.sourcemaps.init())
-      .pipe($.babel())
-      .pipe($.sourcemaps.write())
-      .pipe(gulp.dest('.tmp/scripts'))
-      .pipe($.concat('main.min.js'))
-      .pipe($.uglify({preserveComments: 'some'}))
+      // gulp.src([
+      //   // Note: Since we are not using useref in the scripts build pipeline,
+      //   //       you need to explicitly list your scripts here in the right order
+      //   //       to be correctly concatenated
+      //   './app/scripts/app.js'
+      //   // Other scripts
+      // ])
+      browserify({
+        entries: './app/scripts/app.js',
+        extensions: ['.js'],
+        debug: true
+      })
+      .transform(babelify)
+      .bundle()
+      //.pipe($.newer('.tmp/scripts'))
+      // .pipe($.sourcemaps.init())
+      // //.pipe($.react())
+      // //.pipe($.babel())
+      // .pipe($.sourcemaps.write())
+      //.pipe(gulp.dest('.tmp/scripts'))
+      //.pipe($.concat('app.min.js'))
+      //.pipe($.uglify({preserveComments: 'some'}))
       // Output files
-      .pipe($.size({title: 'scripts'}))
-      .pipe($.sourcemaps.write('.'))
-      .pipe(gulp.dest('dist/scripts'))
+      // .pipe($.size({title: 'scripts'}))
+      // .pipe($.sourcemaps.write('.'))
+      .pipe(source('bundle.js'))
+      .pipe(gulp.dest('dist'))
+      .pipe(gulp.dest('./app/scripts'))
 );
 
 // Scan your HTML for assets & optimize them
@@ -141,7 +153,7 @@ gulp.task('html', () => {
 
     // Concatenate and minify styles
     // In case you are still using useref build blocks
-    .pipe($.if('*.css', $.minifyCss()))
+   .pipe($.if('*.css', $.minifyCss()))
 
     // Minify any HTML
     .pipe($.if('*.html', $.minifyHtml()))
@@ -170,7 +182,7 @@ gulp.task('serve', ['scripts', 'styles'], () => {
   });
 
   gulp.watch(['app/**/*.html'], reload);
-  gulp.watch(['app/styles/**/*.{scss,css}'], ['styles', reload]);
+  gulp.watch(['app/styles/**/*.{less}'], ['styles']);
   gulp.watch(['app/scripts/**/*.js'], ['lint', 'scripts']);
   gulp.watch(['app/images/**/*'], reload);
 });
